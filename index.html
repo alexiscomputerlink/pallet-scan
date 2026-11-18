@@ -221,7 +221,7 @@ function draw(){
  $('mhl').textContent=sk?'Faltantes en esta escuela':'Faltantes en esta paleta';
  if(sk){
   const S=BYSCH[ST.school],l=S.devs,nk=l.filter(x=>ST.checked[x.sn]).length,mk=l.filter(x=>!ST.checked[x.sn]);
-  $('pt').textContent=`${S.school} · ${nk}/${l.length}`;
+  $('pt').textContent=`${S.school} (${S.code}) · ${nk}/${l.length}`;
   $('pinfo').textContent=`Código ${S.code} · Ruta ${S.route||'SPARE'} · ${S.region} · Paleta ${[...S.pallets].join(', ')}`;
   $('sw').style.background=colorOf(S.route);$('bar').firstChild.style.width=(nk/l.length*100)+'%';
   if(document.activeElement!==$('sch'))$('sch').value=`${S.school} (${S.code})`;
@@ -229,7 +229,7 @@ function draw(){
   const q=($('sch').value||'').toUpperCase().trim(),filt=(document.activeElement===$('sch')&&q)?q:'';
   $('grid').className='list';
   $('grid').innerHTML=SCHOOLS_BY_NAME.filter(x=>!filt||x.school.toUpperCase().includes(filt)).map(x=>{const s=x.devs.filter(d=>ST.checked[d.sn]).length;
-   return`<div class="sr${x.code===S.code?' sel':''}${s===x.devs.length?' full':''}" data-sc="${x.code}" title="Código ${x.code}"><span>${x.school}</span><i style="background:${colorOf(x.route)}"></i><b>${s}/${x.devs.length}</b></div>`}).join('')||'<div style="padding:6px;font-size:12px">Sin coincidencias</div>';
+   return`<div class="sr${x.code===S.code?' sel':''}${s===x.devs.length?' full':''}" data-sc="${x.code}" title="Código ${x.code}"><span>${x.school} <small style="color:#6b7280;font-weight:400">· ${x.code} · Ruta ${x.route||'SPARE'}</small></span><i style="background:${colorOf(x.route)}"></i><b>${s}/${x.devs.length}</b></div>`}).join('')||'<div style="padding:6px;font-size:12px">Sin coincidencias</div>';
   const sel=$('grid').querySelector('.sr.sel');if(sel&&!filt)sel.scrollIntoView({block:'nearest'});
   $('mc').textContent=mk.length;$('miss').textContent=mk.slice(0,300).map(x=>x.sn).join('\n')+(mk.length>300?'\n…':'');
   const tk=Object.keys(ST.checked).length;$('tot').textContent=`${tk.toLocaleString()} / ${t.toLocaleString()} verificadas por escuela · ${ST.log.length} eventos en log`;
