@@ -16,7 +16,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:12p
 #banner .ic{font-size:54px;line-height:1}#banner .tx{font-size:30px;font-weight:800;margin-top:6px}#banner .sub{font-size:16px;margin-top:6px;opacity:.95}
 #banner.ok{background:var(--ok)}#banner.bad{background:var(--bad)}#banner.col{background:var(--col)}#banner.yel{background:var(--dup);color:#222}#banner.dup{background:#546e7a}
 #banner.sort .tx{font-size:44px}#banner.sort .ic{font-size:26px}
-.pill.yel{background:var(--dup);color:#222}.pill.sort{background:#455a64}
+.pill.yel{background:var(--dup);color:#222}.pill.sort{background:#455a64}.pill.mis{background:#b71c1c}#banner.mis{background:#b71c1c}
 #banner.done{background:var(--done)}#banner.unk{background:var(--unk)}
 #banner.flash{animation:fl .5s}@keyframes fl{0%{transform:scale(1.03);filter:brightness(1.3)}100%{transform:none;filter:none}}
 #scanrow{display:flex;gap:8px;margin:12px 0}#scan{flex:1;font-size:22px;padding:10px;border:3px solid #1f2937;border-radius:8px}
@@ -88,15 +88,28 @@ function sound(k){if(!ST.sound)return;AC=AC||new (window.AudioContext||window.we
    dup:()=>{tone(700,0,.12,'square',.2);tone(700,.18,.12,'square',.2)},
    yel:()=>{tone(800,0,.12,'square',.2);tone(600,.16,.2,'square',.2)},
    col:()=>{tone(500,0,.14,'square',.2);tone(400,.18,.14,'square',.2);tone(500,.36,.14,'square',.2)},
-   bad:()=>tone(150,0,.9,'sawtooth',.35),
+   bad:()=>tone(150,0,.9,'sawtooth',.35),mis:()=>tone(150,0,.9,'sawtooth',.35),
    unk:()=>{tone(220,0,.35,'sawtooth',.3);tone(110,.4,.6,'sawtooth',.3)},
    done:()=>[523,659,784,1047].forEach((f,i)=>tone(f,i*.13,.25))}[k]||(()=>{}))();}
 
 // ---------- logic ----------
 const cur=()=>ST.pallet;
+// A scan can be one code (S/N or AssetTag) or a combined label "SERIAL-TAG" (e.g. 5CG6235WDP-EC2026001278).
+// Combined labels are accepted only when every part points to the same device.
+function lookup(code){
+ const raw=code.trim().toUpperCase();
+ if(BY[raw])return{d:BY[raw]};
+ const parts=raw.split(/[\s\-_|,;\/+]+/).filter(Boolean);
+ if(parts.length<2)return{d:null};
+ const ds=parts.map(p=>BY[p]);
+ if(!ds.some(Boolean))return{d:null};
+ if(ds.every(x=>x&&x===ds[0]))return{d:ds[0]};
+ return{d:null,mis:parts.map((p,i)=>p+(ds[i]?' → '+ds[i].sn:' → ?')).join(' · ')};
+}
 function result(code){
  const raw=code.trim().toUpperCase(),p=cur();
- const d=BY[raw];
+ const L=lookup(code),d=L.d;
+ if(L.mis)return{k:'mis',txt:'S/N Y TAG NO COINCIDEN',sub:L.mis,d:null};
  if(!d)return{k:'unk',txt:'NO EXISTE EN INVENTARIO',sub:raw,d:null};
  const dColor=d.route||'SPARE',pc=palColors(p);
  if(ST.scanned[d.sn]){const s=ST.scanned[d.sn];return{k:'dup',txt:'YA ESCANEADO',sub:`Paleta ${s.pallet} · ${new Date(s.ts).toLocaleTimeString()} · ${s.op||''}`,d}}
@@ -111,10 +124,11 @@ function result(code){
  if(n===PAL[p].length)return{k:'done',txt:'¡PALETA COMPLETA!',sub:`${n}/${n} unidades · Paleta ${p}`,d};
  return{k:'ok',txt:'CORRECTO',sub:`${d.school} · Ruta ${dColor} · ${n}/${PAL[p].length}`,d};
 }
-const ICON={ok:'✔',yel:'⚠',dup:'↺',col:'◐',bad:'✖',unk:'?',done:'★',sort:'▶'},NAME={ok:'OK',yel:'OTRA PALETA',dup:'DUPLICADO',col:'OTRA ESCUELA',bad:'OTRA RUTA',unk:'NO EXISTE',done:'COMPLETA',sort:'CLASIFICADO'};
+const ICON={ok:'✔',yel:'⚠',dup:'↺',col:'◐',bad:'✖',unk:'?',done:'★',sort:'▶',mis:'≠'},NAME={ok:'OK',yel:'OTRA PALETA',dup:'DUPLICADO',col:'OTRA ESCUELA',bad:'OTRA RUTA',unk:'NO EXISTE',done:'COMPLETA',sort:'CLASIFICADO',mis:'NO COINCIDE'};
 // ---- sorting station: scan a device -> show its route color / school / region ----
 function sortResult(code){
- const d=BY[code.trim().toUpperCase()];
+ const L=lookup(code),d=L.d;
+ if(L.mis)return{k:'mis',txt:'S/N Y TAG NO COINCIDEN',sub:L.mis,d:null};
  if(!d)return{k:'unk',txt:'NO EXISTE EN INVENTARIO',sub:code.trim().toUpperCase(),d:null};
  const r=d.route||'SPARE',again=!!ST.sorted[d.sn];
  if(!again)ST.sorted[d.sn]={ts:Date.now(),op:ST.op};
