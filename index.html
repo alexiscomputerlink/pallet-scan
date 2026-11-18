@@ -74,6 +74,8 @@ const BY={},PAL={};
 D.devices.forEach(d=>{BY[d.sn]=d;BY[d.tag.toUpperCase()]=d});
 function reindex(){Object.keys(PAL).forEach(k=>delete PAL[k]);D.devices.forEach(d=>{(PAL[d.pallet]=PAL[d.pallet]||[]).push(d)})}
 reindex();
+ST.pallet=+ST.pallet;if(!PAL[ST.pallet])ST.pallet=D.pallets[0].pallet;   // repair bad/missing saved pallet
+if(ST.mode!=='pal'&&ST.mode!=='sort')ST.mode='pal';
 const colorOf=r=>r?(D.routes[r]||'#888'):'#9ca3af';
 const palColors=p=>[...new Set((PAL[p]||[]).map(d=>d.route||'SPARE'))];
 const palMeta=p=>D.pallets.find(x=>x.pallet===p);
