@@ -1,0 +1,295 @@
+﻿<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validación de Paletas · Scan</title>
+<style>
+:root{--ok:#2e9e4f;--bad:#d32f2f;--col:#f57c00;--dup:#f2c200;--done:#1565c0;--unk:#6a1b9a}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:#f3f4f6;color:#222}
+header{background:#1f2937;color:#fff;padding:8px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;flex:1}header label{font-size:12px}
+header input,header select,header button{padding:5px 8px;border-radius:4px;border:1px solid #888;font-size:13px}
+header button{cursor:pointer;background:#374151;color:#fff;border-color:#4b5563}
+#warn{background:#fff3cd;padding:5px 14px;font-size:12px;display:none}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:12px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.15);padding:12px}
+#banner{border-radius:10px;padding:22px 16px;text-align:center;color:#fff;background:#6b7280;min-height:170px;display:flex;flex-direction:column;justify-content:center;transition:background .12s}
+#banner .ic{font-size:54px;line-height:1}#banner .tx{font-size:30px;font-weight:800;margin-top:6px}#banner .sub{font-size:16px;margin-top:6px;opacity:.95}
+#banner.ok{background:var(--ok)}#banner.bad{background:var(--bad)}#banner.col{background:var(--col)}#banner.yel{background:var(--dup);color:#222}#banner.dup{background:#546e7a}
+#banner.sort .tx{font-size:44px}#banner.sort .ic{font-size:26px}
+.pill.yel{background:var(--dup);color:#222}.pill.sort{background:#455a64}
+#banner.done{background:var(--done)}#banner.unk{background:var(--unk)}
+#banner.flash{animation:fl .5s}@keyframes fl{0%{transform:scale(1.03);filter:brightness(1.3)}100%{transform:none;filter:none}}
+#scanrow{display:flex;gap:8px;margin:12px 0}#scan{flex:1;font-size:22px;padding:10px;border:3px solid #1f2937;border-radius:8px}
+#scanrow button{font-size:15px;padding:0 14px}
+#ph{display:flex;gap:14px;align-items:center;margin-bottom:8px}#sw{width:54px;height:54px;border-radius:8px;border:2px solid #333}
+#ph b{font-size:22px}#bar{height:14px;background:#e5e7eb;border-radius:7px;overflow:hidden;margin-top:4px}#bar i{display:block;height:100%;background:var(--ok);width:0}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:3px 5px;border-bottom:1px solid #eee;text-align:left}
+.pill{display:inline-block;padding:1px 7px;border-radius:9px;color:#fff;font-size:11px;font-weight:700}
+.pill.ok{background:var(--ok)}.pill.bad{background:var(--bad)}.pill.col{background:var(--col)}.pill.dup{background:#546e7a}.pill.done{background:var(--done)}.pill.unk{background:var(--unk)}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:5px;max-height:330px;overflow:auto}
+.pc{border:2px solid #333;border-radius:6px;padding:2px;text-align:center;font-size:11px;cursor:pointer;background:#fff}.pc.sel{outline:3px solid #000}
+.pc.full{background:#cfe3ff}.pc b{display:block;font-size:13px}
+h3{margin:0 0 6px;font-size:13px}#miss{max-height:150px;overflow:auto;font:12px monospace;columns:2}
+.leg{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+</style></head><body>
+<header><h1>Validación de Paletas · Escaneo</h1><span id="sync" style="font-size:12px;opacity:.85"></span>
+ <label>Operador <input id="op" size="14" placeholder="nombre"></label>
+ <label>Modo <select id="mode"><option value="pal">Paletizar (validar)</option><option value="sort">Clasificar por ruta</option></select></label>
+ <label id="palwrap">Paleta <select id="pal"></select></label>
+ <button id="snd">🔊 Sonido: ON</button><button id="exp">Exportar log (CSV)</button><button id="rst">Reiniciar paleta</button>
+</header>
+<div id="warn"></div>
+<main>
+ <section>
+  <div class="card">
+   <div id="ph"><div id="sw"></div><div style="flex:1"><b id="pt">Paleta —</b><div id="pinfo"></div><div id="bar"><i></i></div></div></div>
+   <div id="banner"><div class="ic">▣</div><div class="tx">Listo para escanear</div><div class="sub">Haga clic aquí y escanee el S/N o AssetTag</div></div>
+   <div id="scanrow"><input id="scan" autocomplete="off" placeholder="Escanear S/N o AssetTag…"></div>
+   <div class="leg"><span class="pill ok">Correcto</span><span class="pill yel">Otra paleta, misma ruta/escuela</span><span class="pill col">Otra escuela, misma ruta</span><span class="pill bad">Otra ruta (rechazado)</span><span class="pill dup">Ya escaneado</span><span class="pill done">Paleta completa</span><span class="pill unk">No existe</span></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>Últimos escaneos</h3><table><thead><tr><th>Hora</th><th>Código</th><th>Resultado</th><th>Detalle</th></tr></thead><tbody id="log"></tbody></table></div>
+ </section>
+ <aside>
+  <div class="card"><h3>Paletas (borde = color de ruta)</h3><div id="grid"></div></div>
+  <div class="card" style="margin-top:12px"><h3>Faltantes en esta paleta (<span id="mc">0</span>)</h3><div id="miss"></div></div>
+  <div class="card" style="margin-top:12px"><h3>Total</h3><div id="tot"></div></div>
+ </aside>
+</main>
+<script src="https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<script>
+const CFG={clientId:'70c4d46e-21f1-4619-9588-e9f237e5e541',tenant:'c4663ab0-3fa0-4384-8383-a4b3c6282719',
+ siteId:'computernetworksystemscorp.sharepoint.com,530e2ef8-df14-48de-a0fd-94bf546e87fe,2cc5f422-1fce-4e71-bdc4-2f2ca7e1591d',
+ devList:'PalletDevices',logList:'PalletScanLog',scopes:['Sites.ReadWrite.All']};
+const $=id=>document.getElementById(id);
+const DEMO=new URLSearchParams(location.search).has('demo');   // local testing only: reads data/data.js (never published)
+function main(D,REMOTE){
+const KEY='palletscan.v1'+(REMOTE?'.sp':'.demo');
+const ST=JSON.parse(localStorage.getItem(KEY)||'{"scanned":{},"log":[],"op":"","pallet":1,"sound":true}');
+const save=()=>localStorage.setItem(KEY,JSON.stringify(ST));
+ST.sorted=ST.sorted||{};ST.mode=ST.mode||'pal';ST.reassign=ST.reassign||{};ST.queue=ST.queue||[];
+if(REMOTE){ST.scanned={};ST.sorted={};ST.reassign={};if(!ST.op)ST.op=REMOTE.name||REMOTE.user}  // SharePoint log is the source of truth; replayed in sync()
+else D.devices.forEach(d=>{if(ST.reassign[d.sn])d.pallet=ST.reassign[d.sn].to});  // demo: local reassignments
+// indexes
+const BY={},PAL={};
+D.devices.forEach(d=>{BY[d.sn]=d;BY[d.tag.toUpperCase()]=d});
+function reindex(){Object.keys(PAL).forEach(k=>delete PAL[k]);D.devices.forEach(d=>{(PAL[d.pallet]=PAL[d.pallet]||[]).push(d)})}
+reindex();
+const colorOf=r=>r?(D.routes[r]||'#888'):'#9ca3af';
+const palColors=p=>[...new Set((PAL[p]||[]).map(d=>d.route||'SPARE'))];
+const palMeta=p=>D.pallets.find(x=>x.pallet===p);
+if(D.placeholder){$('warn').style.display='block';$('warn').textContent='⚠ Los colores por ruta son PLACEHOLDER. Edite routes.json.';}else $('warn').style.display='none';
+
+// ---------- sound ----------
+let AC;function tone(f,t,d,type='sine',v=.25){const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(AC.destination);o.start(AC.currentTime+t);g.gain.setValueAtTime(v,AC.currentTime+t+d*.8);g.gain.linearRampToValueAtTime(0,AC.currentTime+t+d);o.stop(AC.currentTime+t+d)}
+function sound(k){if(!ST.sound)return;AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();
+ ({ok:()=>tone(1200,0,.12),sort:()=>tone(900,0,.1),
+   dup:()=>{tone(700,0,.12,'square',.2);tone(700,.18,.12,'square',.2)},
+   yel:()=>{tone(800,0,.12,'square',.2);tone(600,.16,.2,'square',.2)},
+   col:()=>{tone(500,0,.14,'square',.2);tone(400,.18,.14,'square',.2);tone(500,.36,.14,'square',.2)},
+   bad:()=>tone(150,0,.9,'sawtooth',.35),
+   unk:()=>{tone(220,0,.35,'sawtooth',.3);tone(110,.4,.6,'sawtooth',.3)},
+   done:()=>[523,659,784,1047].forEach((f,i)=>tone(f,i*.13,.25))}[k]||(()=>{}))();}
+
+// ---------- logic ----------
+const cur=()=>ST.pallet;
+function result(code){
+ const raw=code.trim().toUpperCase(),p=cur();
+ const d=BY[raw];
+ if(!d)return{k:'unk',txt:'NO EXISTE EN INVENTARIO',sub:raw,d:null};
+ const dColor=d.route||'SPARE',pc=palColors(p);
+ if(ST.scanned[d.sn]){const s=ST.scanned[d.sn];return{k:'dup',txt:'YA ESCANEADO',sub:`Paleta ${s.pallet} · ${new Date(s.ts).toLocaleTimeString()} · ${s.op||''}`,d}}
+ if(d.pallet!==p){
+  if(!pc.includes(dColor))return{k:'bad',txt:'OTRA RUTA — RECHAZADO',sub:`Es ruta ${dColor} → Paleta ${d.pallet}. Esta paleta: ${pc.join(', ')}`,d};
+  const here=PAL[p].some(x=>x.code===d.code);
+  if(here)return{k:'yel',txt:'OTRA PALETA (MISMA RUTA)',sub:`Va en Paleta ${d.pallet} · ${d.school}`,d,reassign:true};
+  return{k:'col',txt:'OTRA ESCUELA — REVISAR',sub:`${d.school} (Ruta ${dColor}) va en Paleta ${d.pallet}`,d,reassign:true};
+ }
+ ST.scanned[d.sn]={pallet:p,ts:Date.now(),op:ST.op};
+ const n=PAL[p].filter(x=>ST.scanned[x.sn]).length;
+ if(n===PAL[p].length)return{k:'done',txt:'¡PALETA COMPLETA!',sub:`${n}/${n} unidades · Paleta ${p}`,d};
+ return{k:'ok',txt:'CORRECTO',sub:`${d.school} · Ruta ${dColor} · ${n}/${PAL[p].length}`,d};
+}
+const ICON={ok:'✔',yel:'⚠',dup:'↺',col:'◐',bad:'✖',unk:'?',done:'★',sort:'▶'},NAME={ok:'OK',yel:'OTRA PALETA',dup:'DUPLICADO',col:'OTRA ESCUELA',bad:'OTRA RUTA',unk:'NO EXISTE',done:'COMPLETA',sort:'CLASIFICADO'};
+// ---- sorting station: scan a device -> show its route color / school / region ----
+function sortResult(code){
+ const d=BY[code.trim().toUpperCase()];
+ if(!d)return{k:'unk',txt:'NO EXISTE EN INVENTARIO',sub:code.trim().toUpperCase(),d:null};
+ const r=d.route||'SPARE',again=!!ST.sorted[d.sn];
+ if(!again)ST.sorted[d.sn]={ts:Date.now(),op:ST.op};
+ const rt=D.devices.filter(x=>(x.route||'SPARE')===r),st=rt.filter(x=>ST.sorted[x.sn]).length;
+ const sc=D.devices.filter(x=>x.code===d.code),ss=sc.filter(x=>ST.sorted[x.sn]).length;
+ return{k:again?'dup':'sort',d,color:colorOf(d.route),txt:r==='SPARE'?'SPARE · sin ruta':'RUTA '+r,
+  sub:`${d.school}<br>${d.region} · Paleta ${d.pallet}<br>Escuela ${ss}/${sc.length} · Ruta ${st}/${rt.length}`+(again?'<br><b>YA CLASIFICADO</b>':''),
+  detail:`${d.school} · ${d.region} · Ruta ${r} · pal ${d.pallet}`+(again?' · repetido':'')};
+}
+function handle(code){
+ if(!code.trim())return;
+ const m=code.trim().toUpperCase().match(/^(?:PALLET|PALETA|PAL)[:\- ]?(\d{1,3})$/);
+ if(m&&PAL[+m[1]]){ST.mode='pal';$('mode').value='pal';ST.pallet=+m[1];save();$('pal').value=ST.pallet;draw();banner('ok','PALETA '+m[1],'Paleta activa: escanee los equipos',true);return;}
+ const sortMode=ST.mode==='sort',r=sortMode?sortResult(code):result(code);
+ LAST=r;
+ const entry={ts:new Date().toISOString(),op:ST.op,mode:sortMode?'CLASIFICAR':'PALETIZAR',code:code.trim(),sn:r.d?r.d.sn:'',tag:r.d?r.d.tag:'',active_pallet:sortMode?'':cur(),
+  expected_pallet:r.d?r.d.pallet:'',expected_route:r.d?(r.d.route||'SPARE'):'',active_colors:sortMode?'':palColors(cur()).join('|'),result:NAME[r.k],detail:r.detail||r.sub};
+ logPush(entry);save();
+ banner(r.k,r.txt,r.sub,r.color,r.reassign);sound(r.k);draw();
+}
+let LAST=null;
+function banner(k,t,s,color,reassign){const b=$('banner');b.className='';void b.offsetWidth;b.className=k+' flash'+(color?' sort':'');
+ b.style.background=color||'';
+ if(color){const n=parseInt(color.slice(1),16),l=(.299*(n>>16)+.587*((n>>8)&255)+.114*(n&255));b.style.color=l>150?'#111':'#fff'}else b.style.color='';
+ b.innerHTML=`<div class="ic">${ICON[k]||'✔'}</div><div class="tx">${t}</div><div class="sub">${s}</div>`+(reassign?'<button id="reas" style="margin:10px auto 0;padding:6px 12px">Reasignar a esta paleta (supervisor)</button>':'');
+ if(reassign)$('reas').onclick=doReassign;}
+function doReassign(){
+ const d=LAST&&LAST.d;if(!d)return;
+ const sup=prompt('Autorización de supervisor — nombre:');if(!sup)return;
+ const why=prompt('Motivo de la reasignación:');if(!why)return;
+ const from=d.pallet,to=cur();ST.reassign[d.sn]={from,to,sup,why,ts:Date.now()};d.pallet=to;
+ PAL[from]=PAL[from].filter(x=>x!==d);PAL[to].push(d);
+ ST.scanned[d.sn]={pallet:to,ts:Date.now(),op:ST.op};
+ logPush({ts:new Date().toISOString(),op:ST.op,mode:'PALETIZAR',code:d.sn,sn:d.sn,tag:d.tag,active_pallet:to,expected_pallet:from,expected_route:d.route||'SPARE',active_colors:palColors(to).join('|'),result:'REASIGNADO',detail:`de pal ${from} a ${to} · sup ${sup} · ${why}`});
+ save();banner('ok','REASIGNADO',`Paleta ${from} → ${to} · autorizó ${sup}`);draw();$('scan').focus();}
+
+// ---------- UI ----------
+function draw(){
+ const p=cur(),list=PAL[p],n=list.filter(x=>ST.scanned[x.sn]).length,pc=palColors(p),m=palMeta(p);
+ $('pt').textContent=`Paleta ${p} de ${D.pallets.length} · ${n}/${list.length}`;
+ $('pinfo').textContent=`Ruta/color: ${pc.join(', ')} · ${m.schools} escuela(s) · Embarque ${m.ship}`;
+ $('sw').style.background=pc.length>1?`linear-gradient(135deg,${colorOf(pc[0]==='SPARE'?null:pc[0])} 50%,${colorOf(pc[1]==='SPARE'?null:pc[1])} 50%)`:colorOf(pc[0]==='SPARE'?null:pc[0]);
+ $('bar').firstChild.style.width=(n/list.length*100)+'%';
+ const miss=list.filter(x=>!ST.scanned[x.sn]);$('mc').textContent=miss.length;
+ $('miss').textContent=miss.slice(0,300).map(x=>x.sn).join('\n')+(miss.length>300?'\n…':'');
+ $('log').innerHTML=ST.log.slice(-12).reverse().map(e=>{const k=Object.keys(NAME).find(x=>NAME[x]===e.result);return`<tr><td>${e.ts.slice(11,19)}</td><td>${e.code}</td><td><span class="pill ${k}">${e.result}</span></td><td>${e.detail}</td></tr>`}).join('');
+ $('grid').innerHTML=D.pallets.map(x=>{const c=PAL[x.pallet],s=c.filter(d=>ST.scanned[d.sn]).length,col=colorOf(c[0].route);
+  return`<div class="pc${x.pallet===p?' sel':''}${s===c.length?' full':''}" data-p="${x.pallet}" style="border-color:${col}"><b>${x.pallet}</b>${s}/${c.length}</div>`}).join('');
+ const t=D.devices.length,sc=Object.keys(ST.scanned).length;
+ $('tot').textContent=`${sc.toLocaleString()} / ${t.toLocaleString()} escaneadas · ${ST.log.length} eventos en log`;
+ updateStatus();
+ const sm=ST.mode==='sort';$('palwrap').style.display=sm?'none':'';
+ if(sm){
+  const rs=Object.keys(D.routes).sort((a,b)=>parseFloat(a)-parseFloat(b));rs.push('SPARE');
+  const nS=Object.keys(ST.sorted).length;
+  $('pt').textContent=`Clasificación por ruta · ${nS.toLocaleString()}/${t.toLocaleString()}`;
+  $('pinfo').textContent='Escanee cada equipo y colóquelo en el área de su color de ruta';
+  $('sw').style.background='linear-gradient(135deg,#e53935,#fdd835,#43a047,#1e88e5)';
+  $('bar').firstChild.style.width=(nS/t*100)+'%';
+  $('grid').innerHTML=rs.map(r=>{const l=D.devices.filter(x=>(x.route||'SPARE')===r),s=l.filter(x=>ST.sorted[x.sn]).length,c=colorOf(r==='SPARE'?null:r);
+   return`<div class="pc${s===l.length?' full':''}" style="border-color:${c};border-width:4px"><b>${r}</b>${s}/${l.length}</div>`}).join('');
+  $('mc').textContent='—';$('miss').textContent='';
+  $('tot').textContent=`${nS.toLocaleString()} / ${t.toLocaleString()} clasificadas · ${ST.log.length} eventos en log`;
+ }
+}
+$('pal').innerHTML=D.pallets.map(x=>`<option value="${x.pallet}">Paleta ${x.pallet}</option>`).join('');
+$('pal').value=ST.pallet;$('op').value=ST.op;
+$('mode').value=ST.mode;
+$('mode').onchange=()=>{ST.mode=$('mode').value;save();draw();$('scan').focus()};
+$('pal').onchange=()=>{ST.pallet=+$('pal').value;save();draw();$('scan').focus()};
+$('op').oninput=()=>{ST.op=$('op').value;save()};
+$('grid').onclick=e=>{const c=e.target.closest('.pc');if(c){ST.pallet=+c.dataset.p;$('pal').value=ST.pallet;save();draw();$('scan').focus()}};
+$('snd').onclick=()=>{ST.sound=!ST.sound;$('snd').textContent='🔊 Sonido: '+(ST.sound?'ON':'OFF');save();if(ST.sound){AC=AC||new (window.AudioContext||window.webkitAudioContext)();sound('ok')}};
+$('snd').textContent='🔊 Sonido: '+(ST.sound?'ON':'OFF');
+$('scan').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=$('scan').value;$('scan').value='';handle(v)}});
+document.addEventListener('click',e=>{if(!e.target.closest('select,input,button'))$('scan').focus()});
+$('rst').onclick=()=>{const p=cur();if(!confirm('Reiniciar los escaneos de la Paleta '+p+'? El log de auditoría se conserva.'))return;
+ PAL[p].forEach(d=>delete ST.scanned[d.sn]);
+ logPush({ts:new Date().toISOString(),op:ST.op,mode:'PALETIZAR',code:'',sn:'',tag:'',active_pallet:p,expected_pallet:'',expected_route:'',active_colors:'',result:'RESET',detail:'Paleta reiniciada'});save();draw()};
+$('exp').onclick=async()=>{const h=['ts','op','mode','code','sn','tag','active_pallet','expected_pallet','expected_route','active_colors','result','detail'];
+ const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+ const rows=REMOTE?await fetchAllLog():ST.log;   // SharePoint mode exports the complete audit log
+ const c=h.join(',')+'\n'+rows.map(e=>h.map(k=>q(e[k])).join(',')).join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+c],{type:'text/csv'}));a.download='scan_log_'+new Date().toISOString().slice(0,10)+'.csv';a.click()};
+
+// ---------- SharePoint log (ScanLog list) ----------
+const toFields=e=>({Title:String(e.code||e.sn||'-').slice(0,250),Mode:e.mode||'',Operator:e.op||'',SN:e.sn||'',AssetTag:e.tag||'',
+ ActivePallet:String(e.active_pallet==null?'':e.active_pallet),ExpectedPallet:String(e.expected_pallet==null?'':e.expected_pallet),
+ ExpectedRoute:e.expected_route||'',ActiveColors:e.active_colors||'',Result:e.result||'',Detail:String(e.detail||'').replace(/<[^>]*>/g,' ').slice(0,250),
+ ScanTime:e.ts,SignedInUser:REMOTE?REMOTE.user:''});
+const fromFields=f=>({ts:f.ScanTime,op:f.Operator||'',mode:f.Mode||'',code:f.Title||'',sn:f.SN||'',tag:f.AssetTag||'',
+ active_pallet:f.ActivePallet?+f.ActivePallet:'',expected_pallet:f.ExpectedPallet?+f.ExpectedPallet:'',expected_route:f.ExpectedRoute||'',
+ active_colors:f.ActiveColors||'',result:f.Result||'',detail:f.Detail||''});
+function applyEntry(e){
+ const d=BY[e.sn],ts=Date.parse(e.ts)||Date.now();
+ if(e.result==='OK'||e.result==='COMPLETA'){if(d)ST.scanned[e.sn]={pallet:e.active_pallet,ts,op:e.op}}
+ else if(e.result==='CLASIFICADO'){if(d)ST.sorted[e.sn]={ts,op:e.op}}
+ else if(e.result==='REASIGNADO'){if(d){ST.reassign[e.sn]={from:e.expected_pallet,to:e.active_pallet};d.pallet=e.active_pallet;reindex();ST.scanned[e.sn]={pallet:e.active_pallet,ts,op:e.op}}}
+ else if(e.result==='RESET'){(PAL[e.active_pallet]||[]).forEach(x=>delete ST.scanned[x.sn])}
+}
+function logPush(e){ST.log.push(e);if(ST.log.length>300)ST.log.shift();if(REMOTE){ST.queue.push(e);flush()}}
+let stat='';
+function updateStatus(){const el=$('sync');if(!el)return;
+ if(!REMOTE){el.textContent='MODO DEMO (local)';return}
+ el.textContent=(stat||'● Sincronizado')+(ST.queue.length?` · pendientes: ${ST.queue.length}`:'')+' · '+REMOTE.user}
+let flushing=false;
+async function flush(){
+ if(!REMOTE||flushing||!ST.queue.length)return;flushing=true;
+ try{while(ST.queue.length){
+   const part=ST.queue.slice(0,20);
+   const r=await REMOTE.g('/$batch',{method:'POST',body:JSON.stringify({requests:part.map((e,i)=>({id:String(i),method:'POST',
+     url:`/sites/${CFG.siteId}/lists/${CFG.logList}/items`,headers:{'Content-Type':'application/json'},body:{fields:toFields(e)}}))})});
+   const done=new Set();let bad=null;
+   r.responses.forEach(x=>{if(x.status<300)done.add(part[+x.id]);else bad=x});
+   ST.queue=ST.queue.filter(e=>!done.has(e));save();
+   if(bad){stat='⚠ Error al guardar log: '+JSON.stringify(bad.body).slice(0,100);break}
+   stat='';
+ }}catch(e){stat='⚠ Sin conexión (los escaneos se guardan localmente)'}
+ finally{flushing=false;updateStatus()}
+}
+let deltaLink=null;
+async function sync(first){
+ if(!REMOTE)return;
+ try{
+  await flush();
+  let u=deltaLink||`/sites/${CFG.siteId}/lists/${CFG.logList}/items/delta`;const got=[];
+  while(u){const j=await REMOTE.g(u);
+   (j.value||[]).forEach(i=>{if(i.fields&&i.fields.Result)got.push(fromFields(i.fields))});
+   if(j['@odata.nextLink'])u=j['@odata.nextLink'];else{deltaLink=j['@odata.deltaLink']||deltaLink;u=null}}
+  got.sort((a,b)=>String(a.ts).localeCompare(String(b.ts)));
+  got.forEach(applyEntry);
+  if(first){ST.log=got.slice(-300);ST.queue.forEach(applyEntry)}
+  stat='';
+ }catch(e){stat='⚠ Error de sincronización: '+String(e.message).slice(0,100)}
+ save();draw();
+}
+async function fetchAllLog(){
+ const out=[];let u=`/sites/${CFG.siteId}/lists/${CFG.logList}/items?$expand=fields&$top=999`;
+ while(u){const j=await REMOTE.g(u);j.value.forEach(i=>out.push(fromFields(i.fields)));u=j['@odata.nextLink']||null}
+ return out.sort((a,b)=>String(a.ts).localeCompare(String(b.ts)));
+}
+window.addEventListener('online',()=>sync());
+draw();$('scan').focus();
+if(REMOTE){sync(true);setInterval(()=>sync(),30000)}
+window.__test={handle,ST,PAL,BY,sync,flush};
+}
+
+// ---------- bootstrap: sign in, load devices from SharePoint, start ----------
+async function signIn(){
+ const msal0=new msal.PublicClientApplication({auth:{clientId:CFG.clientId,authority:'https://login.microsoftonline.com/'+CFG.tenant,
+  redirectUri:location.origin+location.pathname.replace(/[^\/]*$/,'')},cache:{cacheLocation:'sessionStorage'}});
+ await msal0.handleRedirectPromise();
+ const acc=msal0.getAllAccounts()[0];
+ if(!acc){await msal0.loginRedirect({scopes:CFG.scopes});return new Promise(()=>{})}
+ const token=async()=>{try{return (await msal0.acquireTokenSilent({scopes:CFG.scopes,account:acc})).accessToken}
+  catch(e){await msal0.acquireTokenRedirect({scopes:CFG.scopes});return new Promise(()=>{})}};
+ const g=async(path,opt={})=>{const t=await token();const url=path.startsWith('http')?path:'https://graph.microsoft.com/v1.0'+path;
+  const r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}});
+  if(!r.ok)throw new Error(r.status+' '+(await r.text()).slice(0,200));return r.status===204?null:r.json()};
+ return{g,user:acc.username,name:acc.name};
+}
+async function loadDevices(R){
+ const out=[];let u=`/sites/${CFG.siteId}/lists/${CFG.devList}/items?$expand=fields($select=Title,AssetTag,Pallet,Ship,Region,SchoolCode,School,Route,DevType)&$top=999`;
+ while(u){const j=await R.g(u);
+  j.value.forEach(i=>{const f=i.fields;out.push({sn:String(f.Title||'').toUpperCase(),tag:String(f.AssetTag||''),pallet:+f.Pallet,ship:+f.Ship,
+   region:f.Region||'',code:String(f.SchoolCode||''),school:f.School||'',route:f.Route||null,type:f.DevType||'SCHOOL'})});
+  $('warn').textContent='Cargando equipos desde SharePoint… '+out.length.toLocaleString();u=j['@odata.nextLink']||null}
+ return out;
+}
+function mkPallets(devs){const m={};devs.forEach(d=>{const p=m[d.pallet]=m[d.pallet]||{pallet:d.pallet,ship:d.ship,count:0,s:new Set()};p.count++;p.s.add(d.code)});
+ return Object.values(m).sort((a,b)=>a.pallet-b.pallet).map(p=>({pallet:p.pallet,ship:p.ship,count:p.count,schools:p.s.size}))}
+(async()=>{
+ $('warn').style.display='block';$('warn').textContent='Conectando…';
+ const routes=await (await fetch('routes.json')).json();
+ let devices,R=null;
+ if(DEMO){await new Promise((ok,er)=>{const s=document.createElement('script');s.src='data/data.js';s.onload=ok;s.onerror=()=>er(new Error('data/data.js no existe (modo demo)'));document.head.appendChild(s)});devices=window.PS_DATA.devices}
+ else{R=await signIn();devices=await loadDevices(R);if(!devices.length)throw new Error('La lista PalletDevices está vacía')}
+ main({devices,routes:routes.colors,placeholder:/PLACEHOLDER/.test(routes._note||''),pallets:mkPallets(devices)},R);
+})().catch(e=>{$('warn').style.display='block';$('warn').style.background='#f8d7da';$('warn').textContent='Error: '+e.message});
+</script></body></html>
