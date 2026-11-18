@@ -16,7 +16,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:12p
 #banner .ic{font-size:54px;line-height:1}#banner .tx{font-size:30px;font-weight:800;margin-top:6px}#banner .sub{font-size:16px;margin-top:6px;opacity:.95}
 #banner.ok{background:var(--ok)}#banner.bad{background:var(--bad)}#banner.col{background:var(--col)}#banner.yel{background:var(--dup);color:#222}#banner.dup{background:#546e7a}
 #banner.sort .tx{font-size:44px}#banner.sort .ic{font-size:26px}
-.pill.yel{background:var(--dup);color:#222}.pill.sort{background:#455a64}.pill.mis{background:#b71c1c}#banner.mis{background:#b71c1c}
+.pill.yel{background:var(--dup);color:#222}.pill.sort{background:#455a64}.pill.mis{background:#b71c1c}#banner.mis{background:#b71c1c}.pill.sok{background:var(--ok)}.pill.sdone{background:var(--done)}
 #banner.done{background:var(--done)}#banner.unk{background:var(--unk)}
 #banner.flash{animation:fl .5s}@keyframes fl{0%{transform:scale(1.03);filter:brightness(1.3)}100%{transform:none;filter:none}}
 #scanrow{display:flex;gap:8px;margin:12px 0}#scan{flex:1;font-size:22px;padding:10px;border:3px solid #1f2937;border-radius:8px}
@@ -29,13 +29,16 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:3px 5px;b
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:5px;max-height:330px;overflow:auto}
 .pc{border:2px solid #333;border-radius:6px;padding:2px;text-align:center;font-size:11px;cursor:pointer;background:#fff}.pc.sel{outline:3px solid #000}
 .pc.full{background:#cfe3ff}.pc b{display:block;font-size:13px}
+#grid.list{display:block;max-height:520px}.sr{display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #eee;cursor:pointer;font-size:12px}
+.sr:hover{background:#f3f4f6}.sr.sel{background:#dbeafe;font-weight:700}.sr.full span{color:#1565c0}.sr span{flex:1}.sr i{width:10px;height:10px;border-radius:50%;border:1px solid #333;flex:none}
 h3{margin:0 0 6px;font-size:13px}#miss{max-height:150px;overflow:auto;font:12px monospace;columns:2}
 .leg{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 </style></head><body>
 <header><h1>Validación de Paletas · Escaneo</h1><span id="sync" style="font-size:12px;opacity:.85"></span>
  <label>Operador <input id="op" size="14" placeholder="nombre"></label>
- <label>Modo <select id="mode"><option value="pal">Paletizar (validar)</option><option value="sort">Clasificar por ruta</option></select></label>
+ <label>Modo <select id="mode"><option value="pal">Paletizar (validar)</option><option value="sort">Clasificar por ruta</option><option value="school">Por escuela</option></select></label>
  <label id="palwrap">Paleta <select id="pal"></select></label>
+ <label id="schwrap" style="display:none">Escuela <input id="sch" list="schl" size="38" placeholder="Escriba el nombre de la escuela…" autocomplete="off"><datalist id="schl"></datalist></label>
  <button id="snd">🔊 Sonido: ON</button><button id="exp">Exportar log (CSV)</button><button id="rst">Reiniciar paleta</button>
 </header>
 <div id="warn"></div>
@@ -50,8 +53,8 @@ h3{margin:0 0 6px;font-size:13px}#miss{max-height:150px;overflow:auto;font:12px 
   <div class="card" style="margin-top:12px"><h3>Últimos escaneos</h3><table><thead><tr><th>Hora</th><th>Código</th><th>Resultado</th><th>Detalle</th></tr></thead><tbody id="log"></tbody></table></div>
  </section>
  <aside>
-  <div class="card"><h3>Paletas (borde = color de ruta)</h3><div id="grid"></div></div>
-  <div class="card" style="margin-top:12px"><h3>Faltantes en esta paleta (<span id="mc">0</span>)</h3><div id="miss"></div></div>
+  <div class="card"><h3 id="gh">Paletas (borde = color de ruta)</h3><div id="grid"></div></div>
+  <div class="card" style="margin-top:12px"><h3><span id="mhl">Faltantes en esta paleta</span> (<span id="mc">0</span>)</h3><div id="miss"></div></div>
   <div class="card" style="margin-top:12px"><h3>Total</h3><div id="tot"></div></div>
  </aside>
 </main>
@@ -66,16 +69,22 @@ function main(D,REMOTE){
 const KEY='palletscan.v1'+(REMOTE?'.sp':'.demo');
 const ST=JSON.parse(localStorage.getItem(KEY)||'{"scanned":{},"log":[],"op":"","pallet":1,"sound":true}');
 const save=()=>localStorage.setItem(KEY,JSON.stringify(ST));
-ST.sorted=ST.sorted||{};ST.mode=ST.mode||'pal';ST.reassign=ST.reassign||{};ST.queue=ST.queue||[];
-if(REMOTE){ST.scanned={};ST.sorted={};ST.reassign={};if(!ST.op)ST.op=REMOTE.name||REMOTE.user}  // SharePoint log is the source of truth; replayed in sync()
+ST.sorted=ST.sorted||{};ST.mode=ST.mode||'pal';ST.reassign=ST.reassign||{};ST.queue=ST.queue||[];ST.checked=ST.checked||{};
+if(REMOTE){ST.scanned={};ST.sorted={};ST.reassign={};ST.checked={};if(!ST.op)ST.op=REMOTE.name||REMOTE.user}  // SharePoint log is the source of truth; replayed in sync()
 else D.devices.forEach(d=>{if(ST.reassign[d.sn])d.pallet=ST.reassign[d.sn].to});  // demo: local reassignments
 // indexes
 const BY={},PAL={};
 D.devices.forEach(d=>{BY[d.sn]=d;BY[d.tag.toUpperCase()]=d});
 function reindex(){Object.keys(PAL).forEach(k=>delete PAL[k]);D.devices.forEach(d=>{(PAL[d.pallet]=PAL[d.pallet]||[]).push(d)})}
 reindex();
+// schools (devices grouped by school code)
+const BYSCH={};
+D.devices.forEach(d=>{const s=BYSCH[d.code]=BYSCH[d.code]||{code:d.code,school:d.school,route:d.route||null,region:d.region,devs:[],pallets:new Set()};s.devs.push(d);s.pallets.add(d.pallet)});
+const SCHOOLS=Object.values(BYSCH).sort((a,b)=>(parseFloat(a.route)||99)-(parseFloat(b.route)||99)||a.school.localeCompare(b.school));
+const SCHOOLS_BY_NAME=[...SCHOOLS].sort((a,b)=>a.school.localeCompare(b.school,'es'));
 ST.pallet=+ST.pallet;if(!PAL[ST.pallet])ST.pallet=D.pallets[0].pallet;   // repair bad/missing saved pallet
-if(ST.mode!=='pal'&&ST.mode!=='sort')ST.mode='pal';
+if(!BYSCH[ST.school])ST.school=SCHOOLS[0].code;
+if(!['pal','sort','school'].includes(ST.mode))ST.mode='pal';
 const colorOf=r=>r?(D.routes[r]||'#888'):'#9ca3af';
 const palColors=p=>[...new Set((PAL[p]||[]).map(d=>d.route||'SPARE'))];
 const palMeta=p=>D.pallets.find(x=>x.pallet===p);
@@ -83,7 +92,13 @@ if(D.placeholder){$('warn').style.display='block';$('warn').textContent='⚠ Los
 
 // ---------- sound ----------
 let AC;function tone(f,t,d,type='sine',v=.25){const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(AC.destination);o.start(AC.currentTime+t);g.gain.setValueAtTime(v,AC.currentTime+t+d*.8);g.gain.linearRampToValueAtTime(0,AC.currentTime+t+d);o.stop(AC.currentTime+t+d)}
-function sound(k){if(!ST.sound)return;AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();
+function ensureAC(){if(!ST.sound)return;AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state!=='running')AC.resume()}
+['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,ensureAC));   // unlock audio on the first click/key (scanner keys count)
+function speak(t){try{if(!ST.sound||!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.lang='es-ES';u.rate=1.1;u.volume=1;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){}}
+// loud alarm for a wrong S/N or tag: 4 alternating high/low blasts (~1.1 s)
+const wrongCode=()=>{for(let i=0;i<4;i++)tone(i%2?520:980,i*.28,.26,'square',.6)};
+function sound(k){if(!ST.sound)return;ensureAC();
+ if(k==='unk'||k==='mis'){wrongCode();speak(k==='unk'?'Código incorrecto':'Serial y etiqueta no coinciden');return}
  ({ok:()=>tone(1200,0,.12),sort:()=>tone(900,0,.1),
    dup:()=>{tone(700,0,.12,'square',.2);tone(700,.18,.12,'square',.2)},
    yel:()=>{tone(800,0,.12,'square',.2);tone(600,.16,.2,'square',.2)},
@@ -124,7 +139,23 @@ function result(code){
  if(n===PAL[p].length)return{k:'done',txt:'¡PALETA COMPLETA!',sub:`${n}/${n} unidades · Paleta ${p}`,d};
  return{k:'ok',txt:'CORRECTO',sub:`${d.school} · Ruta ${dColor} · ${n}/${PAL[p].length}`,d};
 }
-const ICON={ok:'✔',yel:'⚠',dup:'↺',col:'◐',bad:'✖',unk:'?',done:'★',sort:'▶',mis:'≠'},NAME={ok:'OK',yel:'OTRA PALETA',dup:'DUPLICADO',col:'OTRA ESCUELA',bad:'OTRA RUTA',unk:'NO EXISTE',done:'COMPLETA',sort:'CLASIFICADO',mis:'NO COINCIDE'};
+const ICON={ok:'✔',yel:'⚠',dup:'↺',col:'◐',bad:'✖',unk:'?',done:'★',sort:'▶',mis:'≠'},NAME={ok:'OK',yel:'OTRA PALETA',dup:'DUPLICADO',col:'OTRA ESCUELA',bad:'OTRA RUTA',unk:'NO EXISTE',done:'COMPLETA',sort:'CLASIFICADO',mis:'NO COINCIDE',sok:'ESCUELA OK',sdone:'ESCUELA COMPLETA'};
+// ---- by-school mode: pick a school, scan its devices; anything from another school/route is rejected ----
+function schoolResult(code){
+ const L=lookup(code),d=L.d,S=BYSCH[ST.school];
+ if(L.mis)return{k:'mis',txt:'S/N Y TAG NO COINCIDEN',sub:L.mis,d:null};
+ if(!d)return{k:'unk',txt:'NO EXISTE EN INVENTARIO',sub:code.trim().toUpperCase(),d:null};
+ const sr=S.route||'SPARE',dr=d.route||'SPARE';
+ if(ST.checked[d.sn]){const s=ST.checked[d.sn];return{k:'dup',txt:'YA ESCANEADO',sub:`${d.school} · ${new Date(s.ts).toLocaleTimeString()} · ${s.op||''}`,d}}
+ if(d.code!==S.code){
+  if(dr!==sr)return{k:'bad',txt:'OTRA RUTA — RECHAZADO',sub:`Es de ${d.school} (Ruta ${dr}, Paleta ${d.pallet}). Esta escuela: Ruta ${sr}`,d};
+  return{k:'col',txt:'OTRA ESCUELA — NO VA AQUÍ',sub:`Es de ${d.school} (Ruta ${dr}, Paleta ${d.pallet})`,d};
+ }
+ ST.checked[d.sn]={school:S.code,ts:Date.now(),op:ST.op};
+ const n=S.devs.filter(x=>ST.checked[x.sn]).length;
+ if(n===S.devs.length)return{k:'done',nm:NAME.sdone,txt:'¡ESCUELA COMPLETA!',sub:`${S.school} · ${n}/${n} unidades`,d};
+ return{k:'ok',nm:NAME.sok,txt:'CORRECTO',sub:`${S.school} · Paleta ${d.pallet} · ${n}/${S.devs.length}`,d};
+}
 // ---- sorting station: scan a device -> show its route color / school / region ----
 function sortResult(code){
  const L=lookup(code),d=L.d;
@@ -141,11 +172,13 @@ function sortResult(code){
 function handle(code){
  if(!code.trim())return;
  const m=code.trim().toUpperCase().match(/^(?:PALLET|PALETA|PAL)[:\- ]?(\d{1,3})$/);
- if(m&&PAL[+m[1]]){ST.mode='pal';$('mode').value='pal';ST.pallet=+m[1];save();$('pal').value=ST.pallet;draw();banner('ok','PALETA '+m[1],'Paleta activa: escanee los equipos',true);return;}
- const sortMode=ST.mode==='sort',r=sortMode?sortResult(code):result(code);
+ if(m&&PAL[+m[1]]){ST.mode='pal';$('mode').value='pal';ST.pallet=+m[1];save();$('pal').value=ST.pallet;draw();banner('ok','PALETA '+m[1],'Paleta activa: escanee los equipos');return;}
+ const ms=code.trim().toUpperCase().match(/^(?:ESCUELA|SCHOOL|ESC)[:\- ]?(\d{4,6})$/);
+ if(ms&&BYSCH[ms[1]]){ST.mode='school';$('mode').value='school';ST.school=ms[1];save();draw();banner('ok','ESCUELA '+ms[1],BYSCH[ms[1]].school);return;}
+ const mode=ST.mode,r=mode==='sort'?sortResult(code):mode==='school'?schoolResult(code):result(code);
  LAST=r;
- const entry={ts:new Date().toISOString(),op:ST.op,mode:sortMode?'CLASIFICAR':'PALETIZAR',code:code.trim(),sn:r.d?r.d.sn:'',tag:r.d?r.d.tag:'',active_pallet:sortMode?'':cur(),
-  expected_pallet:r.d?r.d.pallet:'',expected_route:r.d?(r.d.route||'SPARE'):'',active_colors:sortMode?'':palColors(cur()).join('|'),result:NAME[r.k],detail:r.detail||r.sub};
+ const entry={ts:new Date().toISOString(),op:ST.op,mode:mode==='sort'?'CLASIFICAR':mode==='school'?'ESCUELA':'PALETIZAR',code:code.trim(),sn:r.d?r.d.sn:'',tag:r.d?r.d.tag:'',active_pallet:mode==='pal'?cur():'',
+  expected_pallet:r.d?r.d.pallet:'',expected_route:r.d?(r.d.route||'SPARE'):'',active_colors:mode==='pal'?palColors(cur()).join('|'):mode==='school'?'ESCUELA '+ST.school:'',result:r.nm||NAME[r.k],detail:r.detail||r.sub};
  logPush(entry);save();
  banner(r.k,r.txt,r.sub,r.color,r.reassign);sound(r.k);draw();
 }
@@ -180,7 +213,27 @@ function draw(){
  const t=D.devices.length,sc=Object.keys(ST.scanned).length;
  $('tot').textContent=`${sc.toLocaleString()} / ${t.toLocaleString()} escaneadas · ${ST.log.length} eventos en log`;
  updateStatus();
- const sm=ST.mode==='sort';$('palwrap').style.display=sm?'none':'';
+ const sm=ST.mode==='sort',sk=ST.mode==='school';
+ $('palwrap').style.display=(sm||sk)?'none':'';$('schwrap').style.display=sk?'':'none';
+ $('rst').textContent=sk?'Reiniciar escuela':'Reiniciar paleta';
+ $('grid').className='';
+ $('gh').textContent=sm?'Rutas':sk?'Escuelas por nombre (clic para elegir · punto = color de ruta)':'Paletas (borde = color de ruta)';
+ $('mhl').textContent=sk?'Faltantes en esta escuela':'Faltantes en esta paleta';
+ if(sk){
+  const S=BYSCH[ST.school],l=S.devs,nk=l.filter(x=>ST.checked[x.sn]).length,mk=l.filter(x=>!ST.checked[x.sn]);
+  $('pt').textContent=`${S.school} · ${nk}/${l.length}`;
+  $('pinfo').textContent=`Código ${S.code} · Ruta ${S.route||'SPARE'} · ${S.region} · Paleta ${[...S.pallets].join(', ')}`;
+  $('sw').style.background=colorOf(S.route);$('bar').firstChild.style.width=(nk/l.length*100)+'%';
+  if(document.activeElement!==$('sch'))$('sch').value=`${S.school} (${S.code})`;
+  // alphabetical list of schools (by NAME); narrows while typing in the search box
+  const q=($('sch').value||'').toUpperCase().trim(),filt=(document.activeElement===$('sch')&&q)?q:'';
+  $('grid').className='list';
+  $('grid').innerHTML=SCHOOLS_BY_NAME.filter(x=>!filt||x.school.toUpperCase().includes(filt)).map(x=>{const s=x.devs.filter(d=>ST.checked[d.sn]).length;
+   return`<div class="sr${x.code===S.code?' sel':''}${s===x.devs.length?' full':''}" data-sc="${x.code}" title="Código ${x.code}"><span>${x.school}</span><i style="background:${colorOf(x.route)}"></i><b>${s}/${x.devs.length}</b></div>`}).join('')||'<div style="padding:6px;font-size:12px">Sin coincidencias</div>';
+  const sel=$('grid').querySelector('.sr.sel');if(sel&&!filt)sel.scrollIntoView({block:'nearest'});
+  $('mc').textContent=mk.length;$('miss').textContent=mk.slice(0,300).map(x=>x.sn).join('\n')+(mk.length>300?'\n…':'');
+  const tk=Object.keys(ST.checked).length;$('tot').textContent=`${tk.toLocaleString()} / ${t.toLocaleString()} verificadas por escuela · ${ST.log.length} eventos en log`;
+ }
  if(sm){
   const rs=Object.keys(D.routes).sort((a,b)=>parseFloat(a)-parseFloat(b));rs.push('SPARE');
   const nS=Object.keys(ST.sorted).length;
@@ -197,15 +250,34 @@ function draw(){
 $('pal').innerHTML=D.pallets.map(x=>`<option value="${x.pallet}">Paleta ${x.pallet}</option>`).join('');
 $('pal').value=ST.pallet;$('op').value=ST.op;
 $('mode').value=ST.mode;
+// school picker by NAME: type part of the name, choose from the list (name + code shown; route/qty as hint)
+const schLabel=s=>`${s.school} (${s.code})`;
+$('schl').innerHTML=SCHOOLS.map(s=>`<option value="${schLabel(s).replace(/"/g,'&quot;')}">Ruta ${s.route||'SPARE'} · ${s.devs.length} equipos</option>`).join('');
+$('sch').value=schLabel(BYSCH[ST.school]);
+$('sch').onfocus=()=>$('sch').select();
+$('sch').onchange=()=>{
+ const q=$('sch').value.trim().toUpperCase();
+ const hit=SCHOOLS.find(s=>schLabel(s).toUpperCase()===q)||SCHOOLS.find(s=>s.code===q)
+  ||(()=>{const m=SCHOOLS.filter(s=>s.school.toUpperCase()===q||s.school.toUpperCase().includes(q));return m.length===1?m[0]:null})();
+ if(hit){ST.school=hit.code;save();draw();$('scan').focus();
+  $('warn').style.display=D.placeholder?'block':'none';$('warn').textContent=D.placeholder?'⚠ Los colores por ruta son PLACEHOLDER. Edite routes.json.':''}
+ else{$('sch').value=schLabel(BYSCH[ST.school]);$('warn').style.display='block';$('warn').textContent='Escuela no encontrada o hay varias coincidencias: escriba más del nombre y elija de la lista.'}};
 $('mode').onchange=()=>{ST.mode=$('mode').value;save();draw();$('scan').focus()};
 $('pal').onchange=()=>{ST.pallet=+$('pal').value;save();draw();$('scan').focus()};
 $('op').oninput=()=>{ST.op=$('op').value;save()};
-$('grid').onclick=e=>{const c=e.target.closest('.pc');if(c){ST.pallet=+c.dataset.p;$('pal').value=ST.pallet;save();draw();$('scan').focus()}};
+$('sch').oninput=()=>draw();   // live filter of the school list while typing
+$('grid').onclick=e=>{const c=e.target.closest('.pc,.sr');if(!c)return;
+ if(c.dataset.sc){ST.school=c.dataset.sc;save();draw();$('scan').focus();return}
+ if(c.dataset.p){ST.pallet=+c.dataset.p;$('pal').value=ST.pallet;save();draw();$('scan').focus()}};
 $('snd').onclick=()=>{ST.sound=!ST.sound;$('snd').textContent='🔊 Sonido: '+(ST.sound?'ON':'OFF');save();if(ST.sound){AC=AC||new (window.AudioContext||window.webkitAudioContext)();sound('ok')}};
 $('snd').textContent='🔊 Sonido: '+(ST.sound?'ON':'OFF');
 $('scan').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=$('scan').value;$('scan').value='';handle(v)}});
 document.addEventListener('click',e=>{if(!e.target.closest('select,input,button'))$('scan').focus()});
-$('rst').onclick=()=>{const p=cur();if(!confirm('Reiniciar los escaneos de la Paleta '+p+'? El log de auditoría se conserva.'))return;
+$('rst').onclick=()=>{
+ if(ST.mode==='school'){const S=BYSCH[ST.school];if(!confirm('Reiniciar la verificación de '+S.school+'? El log de auditoría se conserva.'))return;
+  S.devs.forEach(d=>delete ST.checked[d.sn]);
+  logPush({ts:new Date().toISOString(),op:ST.op,mode:'ESCUELA',code:'',sn:'',tag:'',active_pallet:'',expected_pallet:'',expected_route:'',active_colors:'ESCUELA '+S.code,result:'RESET',detail:'Escuela reiniciada: '+S.school});save();draw();return}
+ const p=cur();if(!confirm('Reiniciar los escaneos de la Paleta '+p+'? El log de auditoría se conserva.'))return;
  PAL[p].forEach(d=>delete ST.scanned[d.sn]);
  logPush({ts:new Date().toISOString(),op:ST.op,mode:'PALETIZAR',code:'',sn:'',tag:'',active_pallet:p,expected_pallet:'',expected_route:'',active_colors:'',result:'RESET',detail:'Paleta reiniciada'});save();draw()};
 $('exp').onclick=async()=>{const h=['ts','op','mode','code','sn','tag','active_pallet','expected_pallet','expected_route','active_colors','result','detail'];
@@ -227,7 +299,10 @@ function applyEntry(e){
  if(e.result==='OK'||e.result==='COMPLETA'){if(d)ST.scanned[e.sn]={pallet:e.active_pallet,ts,op:e.op}}
  else if(e.result==='CLASIFICADO'){if(d)ST.sorted[e.sn]={ts,op:e.op}}
  else if(e.result==='REASIGNADO'){if(d){ST.reassign[e.sn]={from:e.expected_pallet,to:e.active_pallet};d.pallet=e.active_pallet;reindex();ST.scanned[e.sn]={pallet:e.active_pallet,ts,op:e.op}}}
- else if(e.result==='RESET'){(PAL[e.active_pallet]||[]).forEach(x=>delete ST.scanned[x.sn])}
+ else if(e.result==='ESCUELA OK'||e.result==='ESCUELA COMPLETA'){if(d)ST.checked[e.sn]={school:d.code,ts,op:e.op}}
+ else if(e.result==='RESET'){
+  if(String(e.active_colors).startsWith('ESCUELA ')){const S=BYSCH[String(e.active_colors).slice(8)];if(S)S.devs.forEach(x=>delete ST.checked[x.sn])}
+  else (PAL[e.active_pallet]||[]).forEach(x=>delete ST.scanned[x.sn])}
 }
 function logPush(e){ST.log.push(e);if(ST.log.length>300)ST.log.shift();if(REMOTE){ST.queue.push(e);flush()}}
 let stat='';
